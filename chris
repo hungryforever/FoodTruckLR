@@ -1,0 +1,58 @@
+from flask import Flask, request, jsonify
+from flask_sqlalchemy import SQLAlchemy
+
+app = Flask(__name__)
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///food_truck.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+db = SQLAlchemy(app)
+
+class Subscriber(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    phone_number = db.Column(db.String(15), unique=True, nullable=False)
+    latitude = db.Column(db.Float)
+    longitude = db.Column(db.Float)
+
+@app.route('/subscribe', methods=['POST'])
+def subscribe():
+    data = request.get_json()
+    phone_number = data.get('phone_number')
+
+    if Subscriber.query.filter_by(phone_number=phone_number).first():
+        return jsonify({'error': 'Subscriber already exists'}), 400
+
+    new_subscriber = Subscriber(phone_number=phone_number)
+    db.session.add(new_subscriber)
+    db.session.commit()
+    
+    return jsonify({'message': 'Subscribed successfully'})
+
+@app.route('/update_location', methods=['POST'])
+def update_location():
+    data = request.get_json()
+    phone_number = data.get('phone_number')
+    location = data.get('location')
+
+    subscriber = Subscriber.query.filter_by(phone_number=phone_number).first()
+
+    if subscriber:
+        subscriber.latitude = location.get('latitude')
+        subscriber.longitude = location.get('longitude')
+        db.session.commit()
+        return jsonify({'message': 'Location updated successfully'})
+    else:
+        return jsonify({'error': 'Subscriber not found'}), 404
+
+@app.route('/get_location', methods=['GET'])
+def get_location():
+    phone_number = request.args.get('phone_number')
+    subscriber = Subscriber.query.filter_by(phone_number=phone_number).first()
+
+    if subscriber:
+        return jsonify({'location': {'latitude': subscriber.latitude, 'longitude': subscriber.longitude}})
+    else:
+        return jsonify({'error': 'Subscriber not found'}), 404
+
+if __name__ == '__main__':
+    db.create_all()
+    app.run(debug=True)
